@@ -200,55 +200,66 @@ class DENsigCounts:
         return counts
 
 
-def compute_pr_auc(data: DEComparison) -> float:
-    """Compute precision-recall for significant recovery.
-
-    Args:
-        data: DEComparison object containing real and predicted DE results
-
-    Returns:
-        float: PR-AUC
-    """
+def compute_pr_auc(data: DEComparison) -> dict[str, float]:
+    """Compute precision-recall AUC per perturbation for significant recovery."""
     return compute_generic_auc(data, method="pr")
 
 
-def compute_roc_auc(data: DEComparison) -> float:
-    """Compute ROC AUC for significant recovery."""
+def compute_roc_auc(data: DEComparison) -> dict[str, float]:
+    """Compute ROC AUC per perturbation for significant recovery."""
     return compute_generic_auc(data, method="roc")
 
 
 def compute_generic_auc(
     data: DEComparison,
     method: Literal["pr", "roc"] = "pr",
-) -> float:
-    """Compute generic AUC for significant recovery."""
+) -> dict[str, float]:
+    """Compute AUC values for significant recovery per perturbation."""
+
+    target_col = data.real.target_col
+    feature_col = data.real.feature_col
+    real_fdr_col = data.real.fdr_col
+    pred_fdr_col = data.pred.fdr_col
+
     labeled_real = data.real.data.with_columns(
-        (pl.col("fdr") < 0.05).cast(pl.Float32).alias("label")
-    ).select(pl.col("target", "feature", "label"))
+        (pl.col(real_fdr_col) < 0.05).cast(pl.Float32).alias("label")
+    ).select([target_col, feature_col, "label"])
+
     merged = (
-        data.pred.data.select(pl.col("target", "feature", "fdr"))
+        data.pred.data.select([target_col, feature_col, pred_fdr_col])
         .join(
             labeled_real,
-            on=["target", "feature"],
+            on=[target_col, feature_col],
             how="inner",
             coalesce=True,
         )
-        .with_columns(nlp=-np.log10(pl.col("fdr").replace(0, 1e-10)))
+        .drop_nulls(["label"])
+        .with_columns((-pl.col(pred_fdr_col).replace(0, 1e-10).log10()).alias("nlp"))
+        .drop_nulls(["nlp"])
     )
 
-    if 0 < merged["label"].sum() < len(merged["label"]):
+    results: dict[str, float] = {}
+    for pert in data.iter_perturbations():
+        pert_data = merged.filter(pl.col(target_col) == pert)
+        if pert_data.shape[0] == 0:
+            results[pert] = float("nan")
+            continue
+
+        labels = pert_data["label"].to_numpy()
+        scores = pert_data["nlp"].to_numpy()
+
+        if not (0 < labels.sum() < len(labels)):
+            results[pert] = float("nan")
+            continue
+
         match method:
             case "pr":
-                pr, re, _ = precision_recall_curve(
-                    merged["label"].to_numpy(),
-                    merged["nlp"].to_numpy(),
-                )
-                return float(auc(re, pr))
+                precision, recall, _ = precision_recall_curve(labels, scores)
+                results[pert] = float(auc(recall, precision))
             case "roc":
-                f, t, _ = roc_curve(
-                    merged["label"].to_numpy(),
-                    merged["nlp"].to_numpy(),
-                )
-                return float(auc(f, t))
-    else:
-        return np.nan
+                fpr, tpr, _ = roc_curve(labels, scores)
+                results[pert] = float(auc(fpr, tpr))
+            case _:
+                raise ValueError(f"Invalid AUC method: {method}")
+
+    return results

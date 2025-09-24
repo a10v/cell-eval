@@ -177,7 +177,7 @@ def run_evaluation(args: ap.Namespace):
                 profile=args.profile,
                 metric_configs=metric_kwargs,
                 skip_metrics=skip_metrics,
-                basename=f"{ct}_results.csv",
+                basename="results.csv",
             )
 
     else:
