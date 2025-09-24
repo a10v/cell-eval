@@ -298,6 +298,8 @@ def _load_or_build_de(
             **pdex_kwargs,
         )
         if outdir is not None:
+            if prefix is not None:
+                prefix = prefix.replace("/", "-") # some prefixes (e.g. HepG2/C3A) may have slashes in them
             pathname = f"{mode}_de.csv" if not prefix else f"{prefix}_{mode}_de.csv"
             logger.info(f"Writing {mode} DE results to: {pathname}")
             frame.write_csv(os.path.join(outdir, pathname))
