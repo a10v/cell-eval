@@ -2,7 +2,6 @@
 
 from typing import Literal
 
-import numpy as np
 import polars as pl
 from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
