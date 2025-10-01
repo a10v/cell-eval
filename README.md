@@ -118,3 +118,7 @@ Take a look at existing metrics in `cell_eval.metrics` to get started.
 ## Development
 
 This work is open-source and welcomes contributions. Feel free to submit a pull request or open an issue.
+
+## Citation
+
+Any publication that uses this source code should cite the [State paper](https://arcinstitute.org/manuscripts/State).
