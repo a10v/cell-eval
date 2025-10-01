@@ -63,9 +63,12 @@ def score_agg_metrics(
     idx_norm_by_one = np.array(idx_norm_by_one)
 
     # Determine the row index for the comparison statistic
-    row_idx = np.flatnonzero(results_user["statistic"] == comparison_statistic)[0]
-    scores_user = results_user.drop("statistic").to_numpy()[row_idx]
-    scores_base = results_base.drop("statistic").to_numpy()[row_idx]
+    u_row_idx = np.flatnonzero(results_user["statistic"] == comparison_statistic)[0]
+    b_row_idx = np.flatnonzero(results_base["statistic"] == comparison_statistic)[0]
+    scores_user = results_user.drop("statistic").to_numpy()[u_row_idx]
+    scores_base = results_base.drop("statistic").to_numpy()[b_row_idx]
+    logger.info(f"user score: {scores_user}")
+    logger.info(f"base score: {scores_base}")
 
     metrics_by_zero = metric_names[idx_norm_by_zero]
     logger.info(

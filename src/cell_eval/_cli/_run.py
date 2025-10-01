@@ -172,6 +172,7 @@ def run_evaluation(args: ap.Namespace):
                 outdir=args.outdir,
                 allow_discrete=args.allow_discrete,
                 prefix=ct,
+                skip_de=args.profile == "pds",
             )
             evaluator.compute(
                 profile=args.profile,
@@ -193,6 +194,7 @@ def run_evaluation(args: ap.Namespace):
             batch_size=args.batch_size,
             outdir=args.outdir,
             allow_discrete=args.allow_discrete,
+            skip_de=args.profile == "pds",
         )
         evaluator.compute(
             profile=args.profile,

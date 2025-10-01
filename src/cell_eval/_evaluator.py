@@ -70,6 +70,7 @@ class MetricsEvaluator:
         allow_discrete: bool = False,
         prefix: str | None = None,
         pdex_kwargs: dict[str, Any] | None = None,
+        skip_de: bool = False,
     ):
         # Enable a global string cache for categorical columns
         pl.enable_string_cache()
@@ -88,17 +89,20 @@ class MetricsEvaluator:
             allow_discrete=allow_discrete,
         )
 
-        self.de_comparison = _build_de_comparison(
-            anndata_pair=self.anndata_pair,
-            de_pred=de_pred,
-            de_real=de_real,
-            de_method=de_method,
-            num_threads=num_threads if num_threads != -1 else mp.cpu_count(),
-            batch_size=batch_size,
-            outdir=outdir,
-            prefix=prefix,
-            pdex_kwargs=pdex_kwargs or {},
-        )
+        if skip_de:
+            self.de_comparison = None
+        else:
+            self.de_comparison = _build_de_comparison(
+                anndata_pair=self.anndata_pair,
+                de_pred=de_pred,
+                de_real=de_real,
+                de_method=de_method,
+                num_threads=num_threads if num_threads != -1 else mp.cpu_count(),
+                batch_size=batch_size,
+                outdir=outdir,
+                prefix=prefix,
+                pdex_kwargs=pdex_kwargs or {},
+            )
 
         self.outdir = outdir
         self.prefix = prefix

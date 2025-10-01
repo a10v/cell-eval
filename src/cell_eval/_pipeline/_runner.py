@@ -30,6 +30,7 @@ KNOWN_PROFILES = [
     "vcc",
     "de",
     "anndata",
+    "pds",
 ]
 
 
@@ -38,7 +39,8 @@ class MetricPipeline:
 
     def __init__(
         self,
-        profile: Literal["full", "minimal", "vcc", "de", "anndata"] | None = "full",
+        profile: Literal["full", "minimal", "vcc", "de", "anndata", "pds"]
+        | None = "full",
         metric_configs: dict[str, dict[str, Any]] | None = None,
         break_on_error: bool = False,
     ) -> None:
@@ -71,6 +73,8 @@ class MetricPipeline:
                 self._metrics.extend(MINIMAL_METRICS)
             case "vcc":
                 self._metrics.extend(VCC_METRICS)
+            case "pds":
+                self._metrics.extend(["discrimination_score_l1"])
             case None:
                 pass
             case _:
@@ -196,10 +200,12 @@ class MetricPipeline:
             if self._break_on_error:
                 raise error
 
-    def compute_de_metrics(self, data: DEComparison) -> None:
+    def compute_de_metrics(self, data: DEComparison | None) -> None:
         """Compute DE metrics."""
         for name in self._metrics:
             if name not in metrics_registry.list_metrics(MetricType.DE):
+                continue
+            if data is None:
                 continue
             self._compute_metric(name, data)
 
