@@ -28,6 +28,71 @@ def de_overlap_metric(
     )
 
 
+import numpy as np
+import polars as pl
+
+class DEWeightedSpearmanLFC:
+    """Compute Weighted Spearman correlation on log fold changes of significant genes."""
+
+    def __init__(self, fdr_threshold: float = 0.05, gamma: float = 1.0) -> None:
+        self.fdr_threshold = fdr_threshold
+        self.gamma = gamma
+
+    def __call__(self, data) -> dict[str, float]:
+        """Compute weighted correlation between log fold changes of significant genes."""
+        correlations = {}
+
+        merged = data.real.filter_to_significant(fdr_threshold=self.fdr_threshold).join(
+            data.pred.data,
+            on=[data.real.target_col, data.real.feature_col],
+            suffix="_pred",
+            how="inner",
+        )
+
+        for pert, df in merged.group_by(data.real.target_col):
+            # Extract arrays
+            l_true = df[data.real.fold_change_col].to_numpy()
+            l_pred = df[f"{data.real.fold_change_col}_pred"].to_numpy()
+            q_true = df[data.real.fdr_col].to_numpy()
+
+            # Pred-side weights (if available)
+            q_pred_col = getattr(data.pred, "fdr_col", None)
+            if q_pred_col and f"{q_pred_col}_pred" in df.columns:
+                q_pred = df[f"{q_pred_col}_pred"].to_numpy()
+                w_pred = np.clip(1.0 - q_pred, 0.0, 1.0)
+                S_hat = q_pred < self.fdr_threshold
+            else:
+                abs_pred = np.abs(l_pred)
+                tau = np.median(abs_pred) + 1e-8
+                w_pred = 1.0 / (1.0 + np.exp(-abs_pred / tau))
+                S_hat = abs_pred >= tau
+
+            # Real weights and sets
+            w_true = np.clip(1.0 - q_true, 0.0, 1.0)
+            S = q_true < self.fdr_threshold
+            w = w_true * w_pred
+
+            # Weighted Spearman
+            ranks_true = np.argsort(np.argsort(l_true))
+            ranks_pred = np.argsort(np.argsort(l_pred))
+            rx = ranks_true - np.average(ranks_true, weights=w)
+            ry = ranks_pred - np.average(ranks_pred, weights=w)
+            num = np.sum(w * rx * ry)
+            den = np.sqrt(np.sum(w * rx**2) * np.sum(w * ry**2))
+            rho_w = float(num / den) if den > 0 else float("nan")
+
+            # Overlap J penalty
+            inter = (S & S_hat).sum()
+            union = (S | S_hat).sum()
+            J = inter / union if union > 0 else 0.0
+            score = rho_w * (J ** self.gamma) if not np.isnan(rho_w) else float("nan")
+
+            correlations[pert] = score
+
+        return correlations
+
+
+
 class DESpearmanSignificant:
     """Compute Spearman correlation on number of significant DE genes."""
 
