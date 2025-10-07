@@ -6,7 +6,7 @@ import polars as pl
 from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
 from .._types import DEComparison, DESortBy
-
+import numpy as np
 
 def de_overlap_metric(
     data: DEComparison,
@@ -27,20 +27,40 @@ def de_overlap_metric(
         sort_by=sort_by,
     )
 
-
-import numpy as np
-import polars as pl
-
 class DEWeightedSpearmanLFC:
-    """Compute Weighted Spearman correlation on log fold changes of significant genes."""
+    """Weighted Spearman on LFC; optionally scaled by dataset overlap metric."""
 
-    def __init__(self, fdr_threshold: float = 0.05, gamma: float = 1.0) -> None:
+    def __init__(
+        self,
+        fdr_threshold: float = 0.05,
+        gamma: float = 1.0,
+        overlap_metric: Literal["precision", "overlap"] = "overlap",
+        k: int | None = None,            # top-k for overlap/precision if you want it
+        sort_by=None,                    # e.g., DESortBy.ABS_FOLD_CHANGE
+        use_overlap: bool = True,        # turn off to use plain weighted Spearman
+    ) -> None:
         self.fdr_threshold = fdr_threshold
         self.gamma = gamma
+        self.overlap_metric = overlap_metric
+        self.k = k
+        self.sort_by = sort_by
+        self.use_overlap = use_overlap
 
     def __call__(self, data) -> dict[str, float]:
-        """Compute weighted correlation between log fold changes of significant genes."""
-        correlations = {}
+        # Precompute per-pert overlap once (if requested and available)
+        overlap = {}
+        if self.use_overlap and hasattr(data, "compute_overlap"):
+            try:
+                overlap = data.compute_overlap(
+                    k=self.k,
+                    metric=self.overlap_metric,
+                    fdr_threshold=self.fdr_threshold,
+                    sort_by=self.sort_by,
+                )
+            except Exception:
+                overlap = {}
+
+        correlations: dict[str, float] = {}
 
         merged = data.real.filter_to_significant(fdr_threshold=self.fdr_threshold).join(
             data.pred.data,
@@ -49,49 +69,55 @@ class DEWeightedSpearmanLFC:
             how="inner",
         )
 
+        # iterate per perturbation
         for pert, df in merged.group_by(data.real.target_col):
-            # Extract arrays
             l_true = df[data.real.fold_change_col].to_numpy()
             l_pred = df[f"{data.real.fold_change_col}_pred"].to_numpy()
-            q_true = df[data.real.fdr_col].to_numpy()
 
-            # Pred-side weights (if available)
+            # weights: prefer (1 - q) on each side; else uniform
+            w_true = None
+            if getattr(data.real, "fdr_col", None) in df.columns:
+                w_true = np.clip(1.0 - df[data.real.fdr_col].to_numpy(), 0.0, 1.0)
+            else:
+                w_true = np.ones(len(l_true), dtype=float)
+
+            w_pred = None
             q_pred_col = getattr(data.pred, "fdr_col", None)
             if q_pred_col and f"{q_pred_col}_pred" in df.columns:
-                q_pred = df[f"{q_pred_col}_pred"].to_numpy()
-                w_pred = np.clip(1.0 - q_pred, 0.0, 1.0)
-                S_hat = q_pred < self.fdr_threshold
+                w_pred = np.clip(1.0 - df[f"{q_pred_col}_pred"].to_numpy(), 0.0, 1.0)
             else:
-                abs_pred = np.abs(l_pred)
-                tau = np.median(abs_pred) + 1e-8
-                w_pred = 1.0 / (1.0 + np.exp(-abs_pred / tau))
-                S_hat = abs_pred >= tau
+                w_pred = np.ones(len(l_pred), dtype=float)
 
-            # Real weights and sets
-            w_true = np.clip(1.0 - q_true, 0.0, 1.0)
-            S = q_true < self.fdr_threshold
             w = w_true * w_pred
+            if not np.any(w > 0):
+                correlations[pert] = float("nan")
+                continue
 
-            # Weighted Spearman
-            ranks_true = np.argsort(np.argsort(l_true))
-            ranks_pred = np.argsort(np.argsort(l_pred))
-            rx = ranks_true - np.average(ranks_true, weights=w)
-            ry = ranks_pred - np.average(ranks_pred, weights=w)
-            num = np.sum(w * rx * ry)
-            den = np.sqrt(np.sum(w * rx**2) * np.sum(w * ry**2))
+            # weighted Spearman (rank → weighted corr)
+            r_true = np.argsort(np.argsort(l_true))
+            r_pred = np.argsort(np.argsort(l_pred))
+            rtx = r_true - np.average(r_true, weights=w)
+            rty = r_pred - np.average(r_pred, weights=w)
+            num = np.sum(w * rtx * rty)
+            den = np.sqrt(np.sum(w * rtx**2) * np.sum(w * rty**2))
             rho_w = float(num / den) if den > 0 else float("nan")
 
-            # Overlap J penalty
-            inter = (S & S_hat).sum()
-            union = (S | S_hat).sum()
-            J = inter / union if union > 0 else 0.0
-            score = rho_w * (J ** self.gamma) if not np.isnan(rho_w) else float("nan")
+            # overlap/precision factor (if provided); else fallback to simple Jaccard on FDR
+            scale = 1.0
+            if self.use_overlap:
+                if pert in overlap:
+                    scale = float(overlap[pert])
+                else:
+                    # quick fallback Jaccard based on FDR if both sides have it
+                    if (getattr(data.real, "fdr_col", None) in df.columns) and q_pred_col and f"{q_pred_col}_pred" in df.columns:
+                        S = df[data.real.fdr_col].to_numpy() < self.fdr_threshold
+                        S_hat = df[f"{q_pred_col}_pred"].to_numpy() < self.fdr_threshold
+                        u = (S | S_hat).sum()
+                        scale = (S & S_hat).sum() / u if u > 0 else 0.0
 
-            correlations[pert] = score
+            correlations[pert] = rho_w if np.isnan(rho_w) else rho_w * (scale ** self.gamma)
 
         return correlations
-
-
 
 class DESpearmanSignificant:
     """Compute Spearman correlation on number of significant DE genes."""
