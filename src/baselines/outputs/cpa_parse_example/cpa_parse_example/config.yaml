@@ -1,0 +1,84 @@
+data:
+  name: PerturbationDataModule
+  kwargs:
+    toml_config_path: /home/dennis/cell-eval/src/baselines/state_sets_reproduce/configs/parse.toml
+    embed_key: hvg
+    output_space: gene
+    pert_rep: onehot
+    basal_rep: sample
+    num_workers: 4
+    pin_memory: true
+    n_basal_samples: 1
+    basal_mapping_strategy: batch
+    should_yield_control_cells: true
+    batch_col: donor
+    pert_col: cytokine
+    cell_type_key: donor
+    control_pert: PBS
+    map_controls: true
+    perturbation_features_file: null
+    store_raw_basal: false
+    int_counts: false
+  output_dir: null
+  debug: true
+model:
+  name: CPA
+  checkpoint: null
+  device: cuda
+  kwargs:
+    n_latent: 64
+    recon_loss: gauss
+    pert_embeddings: null
+    hidden_dim: 256
+    n_hidden_encoder: 768
+    n_layers_encoder: 4
+    n_hidden_decoder: 768
+    n_layers_decoder: 3
+    use_batch_norm: decoder
+    use_layer_norm: encoder
+    dropout_rate_encoder: 0.15
+    dropout_rate_decoder: 0.15
+    n_hidden_adv: 64
+    n_layers_adv: 2
+    use_norm_adv: batch
+    dropout_rate_adv: 0.2
+    variational: false
+    expr_transform: none
+    seed: 2025
+    cell_sentence_len: 1
+    residual_decoder: false
+    nb_decoder: false
+    encode_dosage: false
+    dosage_non_linearity: identity
+training:
+  max_steps: 10000
+  train_seed: 42
+  val_freq: 1000
+  test_freq: 9000
+  gradient_clip_val: 3
+  n_epochs_kl_warmup: null
+  n_steps_adv_warmup: 50000
+  n_steps_pretrain_ae: 50000
+  adv_steps: null
+  reg_adv: 15.0
+  pen_adv: 20.0
+  lr: 0.0003
+  wd: 4.0e-07
+  adv_lr: 0.0005
+  adv_wd: 4.0e-07
+  step_size_lr: 25
+  do_clip_grad: false
+  adv_loss: cce
+  batch_size: 128
+wandb:
+  entity: CPA-Parse-Donor
+  project: CPA
+  local_wandb_dir: ./wandb_logs
+  tags: []
+name: cpa_parse_example
+output_dir: /home/dennis/cell-eval/src/baselines/outputs/cpa_parse_example
+use_wandb: false
+overwrite: false
+return_adatas: false
+pred_adata_path: null
+true_adata_path: null

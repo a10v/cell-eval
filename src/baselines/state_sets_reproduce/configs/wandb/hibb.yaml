@@ -1,0 +1,4 @@
+entity: CPA-Parse-Donor
+project: CPA
+local_wandb_dir: ./wandb_logs
+tags: [] 

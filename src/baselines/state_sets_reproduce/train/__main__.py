@@ -542,4 +542,5 @@ def train(cfg: DictConfig) -> None:
         pickle.dump(dm, f)
 
 if __name__ == "__main__":
+    print("Start process")
     train()

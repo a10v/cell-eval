@@ -2,10 +2,10 @@
 # training tasks
 defaults:
   - data: perturbation
-  - model: lrlm
-  - training: lrlm
+  - model: cpa
+  - training: cpa
   # - override /training: lrlm
-  # - wandb: hibb # Change this as needed
+  - wandb: hibb # Change this as needed
   - _self_
   
 

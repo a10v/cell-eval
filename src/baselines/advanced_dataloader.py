@@ -141,12 +141,21 @@ class PerturbationDataset(Dataset):
         
         return resolved
 
-    def _extract_hvg_to_obsm(self, data_path: Path, hvg_indices: np.ndarray):
+    def _extract_hvg_to_obsm(self, data_path: Path):
         """Extract HVG embeddings and save to obsm/X_hvg using backed mode efficiently."""
         logger.info(f"Extracting HVG embeddings for {data_path.name}...")
         
         # Step 1: Load in backed mode to extract HVG data (memory efficient!)
         adata_backed = ad.read_h5ad(data_path, backed="r")
+        
+        # Get HVG indices from the highly_variable column in var
+        if "highly_variable" not in adata_backed.var.columns:
+            raise ValueError(f"'highly_variable' column not found in adata.var for {data_path.name}")
+        
+        hvg_mask = adata_backed.var["highly_variable"].values
+        hvg_indices = np.where(hvg_mask)[0]
+        
+        logger.info(f"Found {len(hvg_indices)} HVGs out of {adata_backed.shape[1]} total genes")
         
         # Extract HVG columns from expression matrix
         from scipy import sparse
@@ -163,7 +172,7 @@ class PerturbationDataset(Dataset):
         del adata_backed
         
         # Step 3: Load again (not backed) to add HVG and write back
-        logger.info(f"Reopening file to save HVG...")
+        logger.info("Reopening file to save HVG...")
         adata = ad.read_h5ad(data_path)
         adata.obsm["X_hvg"] = X_hvg
         
@@ -197,20 +206,8 @@ class PerturbationDataset(Dataset):
             if need_hvg_extraction:
                 if self.extract_hvg_if_missing:
                     logger.warning(f"X_hvg not found in {data_path.name}, extracting...")
-                    
-                    # Load or compute HVG indices
-                    if self.hvg_indices_file and Path(self.hvg_indices_file).exists():
-                        hvg_indices = np.load(self.hvg_indices_file).astype(np.int64)
-                        logger.info(f"Loaded {len(hvg_indices)} HVG indices")
-                    else:
-                        logger.warning("HVG indices not provided, using all genes")
-                        # Quick peek to get n_vars
-                        with h5py.File(str(data_path), 'r') as f:
-                            n_vars = f['X'].attrs['shape'][1]
-                        hvg_indices = np.arange(n_vars, dtype=np.int64)
-                    
-                    # Extract HVG embeddings (file is closed at this point)
-                    self._extract_hvg_to_obsm(data_path, hvg_indices)
+                    # Extract HVG embeddings using highly_variable column from adata.var
+                    self._extract_hvg_to_obsm(data_path)
                 else:
                     raise ValueError(f"X_hvg not found in {data_path.name} and extract_hvg_if_missing=False")
             
@@ -242,8 +239,16 @@ class PerturbationDataset(Dataset):
                 all_barcodes.append(np.array([f"cell_{j}" for j in range(len(adata))]))
             
             # Gene names (should be consistent across files)
+            # If using HVG, store only HVG gene names
             if all_gene_names is None:
-                all_gene_names = adata.var_names.tolist()
+                if self.embed_key == "X_hvg" and "highly_variable" in adata.var.columns:
+                    # Store only HVG gene names
+                    hvg_mask = adata.var["highly_variable"].values
+                    all_gene_names = adata.var_names[hvg_mask].tolist()
+                    logger.info(f"Storing {len(all_gene_names)} HVG gene names")
+                else:
+                    # Store all gene names
+                    all_gene_names = adata.var_names.tolist()
         
         # Concatenate all data
         self.embeddings = np.vstack(all_embeddings)
