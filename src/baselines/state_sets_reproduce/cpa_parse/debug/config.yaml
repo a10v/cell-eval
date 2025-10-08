@@ -1,0 +1,70 @@
+data:
+  name: PerturbationDataModule
+  kwargs:
+    toml_config_path: ./configs/parse.toml
+    embed_key: X_hvg
+    output_space: gene
+    pert_rep: onehot
+    basal_rep: sample
+    num_workers: 4
+    pin_memory: true
+    n_basal_samples: 1
+    basal_mapping_strategy: random
+    should_yield_control_cells: true
+    batch_col: donor
+    pert_col: cytokine
+    cell_type_key: donor
+    control_pert: PBS
+    map_controls: true
+    perturbation_features_file: null
+    store_raw_basal: false
+    int_counts: false
+  output_dir: null
+  debug: true
+model:
+  name: CPA
+  checkpoint: null
+  device: cuda
+  kwargs:
+    n_latent: 64
+    recon_loss: gauss
+    pert_embeddings: null
+    hidden_dim: 256
+    n_hidden_encoder: 768
+    n_layers_encoder: 4
+    n_hidden_decoder: 768
+    n_layers_decoder: 3
+    use_batch_norm: decoder
+    use_layer_norm: encoder
+    dropout_rate_encoder: 0.15
+    dropout_rate_decoder: 0.15
+    n_hidden_adv: 64
+    n_layers_adv: 2
+    use_norm_adv: batch
+    dropout_rate_adv: 0.2
+    variational: false
+    expr_transform: none
+    seed: 2025
+    cell_sentence_len: 1
+    residual_decoder: false
+    nb_decoder: false
+    encode_dosage: false
+    dosage_non_linearity: identity
+training:
+  wandb_track: false
+  batch_size: 128
+  lr: 0.0003
+  max_steps: 50000
+  max_epochs: 1
+  train_seed: 42
+  val_freq: 1000
+  test_freq: 2000
+  ckpt_every_n_epochs: 1
+  gradient_clip_val: 10
+name: debug
+output_dir: /home/dennis/state-benchmark/baselines/state_sets_reproduce/cpa_parse/
+use_wandb: false
+overwrite: false
+return_adatas: false
+pred_adata_path: null
+true_adata_path: null

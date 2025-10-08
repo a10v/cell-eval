@@ -1,0 +1,82 @@
+# Example TOML Configuration for Advanced Perturbation Data Module
+# This file demonstrates all the configuration options available
+
+# ============================================================================
+# Dataset Paths
+# ============================================================================
+# You can specify:
+# 1. Individual files: path/to/file.h5ad
+# 2. Directories: path/to/dir/ (will load ALL h5/h5ad files)
+# 3. Multiple datasets with different names
+
+[datasets]
+parse_pbmc = "/home/dennis/Parse_10M_PBMC_cytokines.h5ad"
+# replogle = "/path/to/replogle_dataset/"  # Directory - loads all h5/h5ad files
+# norman = "/path/to/norman.h5ad"          # Single file
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+# Specify which datasets go to training
+# All datasets listed here will be used for training by default
+# (unless specific cell types or perturbations are held out below)
+
+[training]
+parse_pbmc = "train"
+# replogle = "train"
+# norman = "train"
+
+# ============================================================================
+# Zero-Shot Configuration (Hold Out Entire Cell Types)
+# ============================================================================
+# Format: "dataset.cell_type" = "val" or "test"
+# This holds out ALL cells of a specific cell type for validation or testing
+
+[zeroshot]
+# Example: Hold out specific cell types for zero-shot evaluation
+# "parse_pbmc.T_cells" = "test"
+# "parse_pbmc.B_cells" = "val"
+# "replogle.jurkat" = "test"
+# "replogle.rpe1" = "val"
+
+# ============================================================================
+# Few-Shot Configuration (Hold Out Specific Perturbations)
+# ============================================================================
+# Format: [fewshot."dataset.cell_type"]
+# This holds out specific perturbations within a cell type
+
+[fewshot]
+# Example: Hold out specific cytokines for few-shot evaluation
+# [fewshot."parse_pbmc.T_cells"]
+# val = ["IL2", "IL4"]
+# test = ["IL6", "TNF", "IFNG"]
+
+# [fewshot."parse_pbmc.B_cells"]
+# val = ["IL10"]
+# test = ["IL12", "IL17"]
+
+# [fewshot."replogle.rpe1"]
+# val = ["AARS"]
+# test = ["AARS", "NUP107", "RPUSD4"]
+
+# ============================================================================
+# Additional Notes
+# ============================================================================
+# 
+# 1. Zero-shot vs Few-shot:
+#    - Zero-shot: Entire cell types are held out (generalization to new cell types)
+#    - Few-shot: Specific perturbations are held out (generalization to new perturbations)
+#
+# 2. Priority:
+#    - Zero-shot takes priority over few-shot
+#    - If a cell type is in zero-shot, few-shot config for that cell type is ignored
+#
+# 3. Default behavior:
+#    - If no zero-shot or few-shot config, uses simple random 80/10/10 split
+#    - Train gets all samples not explicitly assigned to val/test
+#
+# 4. Multi-dataset support:
+#    - Can mix datasets with different cell types and perturbations
+#    - Each dataset can have its own split strategy
+#    - Cell types and perturbations are tracked per dataset
+
